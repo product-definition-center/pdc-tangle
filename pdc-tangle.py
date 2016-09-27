@@ -3,6 +3,8 @@ import click
 import pdc_client
 import asciitree
 import itertools
+import six
+from six.moves import range
 from requests.exceptions import ConnectionError
 
 
@@ -152,7 +154,7 @@ def strip_circular_deps(deps_dict, deps_list=[]):
     nested dict it is
     :return: None
     """
-    for dep_name, dep_value in deps_dict.iteritems():
+    for dep_name, dep_value in six.iteritems(deps_dict):
         is_circular_dep = dep_name in deps_list
         deps_list.append(dep_name)
 

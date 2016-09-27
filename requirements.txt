@@ -2,3 +2,4 @@ click
 pdc-client
 asciitree
 requests
+six
