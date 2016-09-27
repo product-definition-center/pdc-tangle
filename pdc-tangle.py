@@ -36,9 +36,7 @@ def cli(artifact, release, dep_type, server):
                 click.echo(
                     'There are no dependencies for "{}"'.format(artifact))
             else:
-                # Print the dependency tree
-                tr = asciitree.LeftAligned()
-                click.echo(tr({artifact: deps_dict.get(artifact)}))
+                print_deps_dict_as_tree(artifact, deps_dict)
         else:
             click.echo('"{0}" is not in PDC'.format(artifact))
     except ConnectionError:
@@ -108,17 +106,8 @@ def add_dependency(artifact, new_dependency, deps_dict):
     if new_dependency not in deps_dict:
         deps_dict.update({new_dependency: {}})
 
-    # If the new dependency relies on the artifact, state that it's circular
-    if deps_dict.get(new_dependency).get(artifact):
-        deps_dict.get(artifact).update({new_dependency: {
-            '<CircularDep on {}>'.format(artifact): {}}})
-    # If the artifact relies on itself, state that it's circular
-    elif artifact == new_dependency:
-        deps_dict.get(artifact).update(
-            {'<CircularDep on {}>'.format(artifact): {}})
-    else:
-        deps_dict.get(artifact).update(
-            {new_dependency: deps_dict.get(new_dependency)})
+    deps_dict.get(artifact).update(
+        {new_dependency: deps_dict.get(new_dependency)})
 
 
 # Function written by Ralph Bean <rbean@redhat.com>
@@ -152,6 +141,45 @@ def is_artifact_in_pdc(pdc_obj, artifact):
 
     return False
 
+
+def strip_circular_deps(deps_dict, deps_list=[]):
+    """
+    Takes the dependency dictionary and replaces any circular dependencies with
+    <CircularDep on dep_name> so that when printing the dict out,
+    it isn't stuck in infinite recursion.
+    :param deps_dict: the dependency dict to replace circular dependencies from
+    :param deps_list: a static list that is used to determine where in the
+    nested dict it is
+    :return: None
+    """
+    for dep_name, dep_value in deps_dict.iteritems():
+        is_circular_dep = dep_name in deps_list
+        deps_list.append(dep_name)
+
+        if is_circular_dep:
+            deps_dict.pop(dep_name)
+            deps_dict.update({'<CircularDep on {}>'.format(dep_name): {}})
+        elif dep_value != {}:
+            strip_circular_deps(dep_value, deps_list)
+
+        deps_list.pop()
+
+
+def print_deps_dict_as_tree(artifact, deps_dict):
+    """
+    Prints out dependency dictionary in a tree structure
+    :param artifact: the artifact in deps_dict to print out (i.e. what the
+    user originally queried for)
+    :param deps_dict: the dependency dictionary
+    :return:
+    """
+    # Remove the flat dictionary portion
+    deps_dict = {artifact: deps_dict.get(artifact)}
+    # Remove any circular dependencies to avoid infinite recursion
+    strip_circular_deps(deps_dict)
+    # Print the dependency dictionary as a tree
+    tr = asciitree.LeftAligned()
+    click.echo(tr(deps_dict))
 
 if __name__ == '__main__':
     cli()
