@@ -54,5 +54,13 @@ cd /opt/pdc-tangle/src
 dnf install -y python python-virtualenv gcc python-devel krb5-devel libffi-devel redhat-rpm-config
 virtualenv /opt/pdc-tangle/env
 source /opt/pdc-tangle/env/bin/activate
-pip install -r /opt/pdc-tangle/src/requirements.txt
+pip install -r /path/to/pdc-tangle/requirements.txt
+```
+
+#### virtualenv on macOS
+
+```bash
+sudo virtualenv /opt/pdc-tangle/env
+source /opt/pdc-tangle/env/bin/activate
+sudo pip install -r /path/to/pdc-tangle/requirements.txt
 ```
