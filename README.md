@@ -56,3 +56,11 @@ virtualenv /opt/pdc-tangle/env
 source /opt/pdc-tangle/env/bin/activate
 pip install -r /path/to/pdc-tangle/requirements.txt
 ```
+
+#### virtualenv on macOS
+
+```bash
+sudo virtualenv /opt/pdc-tangle/env
+source /opt/pdc-tangle/env/bin/activate
+sudo pip install -r /path/to/pdc-tangle/requirements.txt
+```
