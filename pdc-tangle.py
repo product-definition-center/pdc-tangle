@@ -3,6 +3,9 @@ import click
 import pdc_client
 import asciitree
 import itertools
+import multiprocessing.pool
+import six
+from six.moves import range
 from requests.exceptions import ConnectionError
 
 
@@ -56,7 +59,6 @@ def collect_dependencies(pdc_obj, artifacts, release, dep_type, deps_dict):
     be updated with the results.
     :return: None
     """
-
     # Filter down the artifact list to those that have empty dicts in deps_dict
     # This gives us the artifacts that haven't been processed
     artifacts_to_process = [artifact for artifact in artifacts
@@ -64,21 +66,42 @@ def collect_dependencies(pdc_obj, artifacts, release, dep_type, deps_dict):
 
     # After filtering, check to see if there are any artifacts to process
     if artifacts_to_process:
+        # This function is created to take advantage of mapping
+        def get_paged_wrapper(chunk):
+            # Return as a list in order to exhaust the generator
+            return list(pdc_obj.get_paged(
+                res=pdc_obj['release-component-relationships/'],
+                from_component_name=chunk,
+                from_component_release=release,
+                type=dep_type,
+                page_size=100
+            ))
+
         dependencies_results = []
-        # Query PDC in chunks of 100 for the requested artifacts' dependencies.
-        # This is a current workaround due to URI length limitations that
-        # was inspired by Ralph Bean <rbean@redhat.com>
-        for chunk in chunked_iter(artifacts_to_process, 100):
-            dependencies_results = itertools.chain(
-                dependencies_results,
-                pdc_obj.get_paged(
-                    pdc_obj['release-component-relationships/'],
-                    from_component_name=chunk,
-                    from_component_release=release,
-                    type=dep_type,
-                    page_size=100
-                )
-            )
+
+        search_in_chunks_of = 100
+        # If there is more than `search_in_chunks_of` dependencies to process,
+        # do it in parallel
+        if len(artifacts_to_process) > search_in_chunks_of:
+            # Get the artifacts in chunks of `search_in_chunks_of`. This is a
+            # current workaround due to URI length limitations that
+            # was inspired by Ralph Bean <rbean@redhat.com>.
+            chunks = chunked_iter(artifacts_to_process, search_in_chunks_of)
+            # Start a thread pool of 8
+            pool = multiprocessing.pool.ThreadPool(8)
+            # Run the the chunked queries in parallel
+            for result in pool.map(get_paged_wrapper, chunks):
+                dependencies_results = itertools.chain(
+                    dependencies_results, result)
+            # Close the thread pool
+            pool.close()
+            # Delete the variables that are no longer used to save memory
+            del pool
+            del chunks
+        # If there's less than `search_in_chunks_of` dependencies, avoid the
+        # overhead and don't setup multi-threading
+        else:
+            dependencies_results = get_paged_wrapper(artifacts_to_process)
 
         dependencies_list = []
 
@@ -89,6 +112,8 @@ def collect_dependencies(pdc_obj, artifacts, release, dep_type, deps_dict):
 
             add_dependency(artifact_name, dependency_name, deps_dict)
 
+        # Clear the API results out of memory
+        del dependencies_results
         # Recursively collect all the dependencies' dependencies
         collect_dependencies(pdc_obj, dependencies_list, release, dep_type,
                              deps_dict)
@@ -152,7 +177,7 @@ def strip_circular_deps(deps_dict, deps_list=[]):
     nested dict it is
     :return: None
     """
-    for dep_name, dep_value in deps_dict.iteritems():
+    for dep_name, dep_value in six.iteritems(deps_dict):
         is_circular_dep = dep_name in deps_list
         deps_list.append(dep_name)
 
